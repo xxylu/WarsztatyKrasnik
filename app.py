@@ -10,9 +10,11 @@ cols = 30
 grid = [[0 for _ in range(rows)] for _ in range(cols)]  # fill zerami
 
 queue = deque()         # kolejka kolejno odwiedzonych wierzchołków w BFS
+stack = []              # stos kolejno odwiedzonych wierzchołków w DFS
 visited = set()         # zbiór odwiedzonych wierzchołków
 parent = {}             # wymagane do odtworzenia ścieżki
 bfs_running = False
+dfs_running = False
 
 start, end = None, None
 found = False
@@ -61,13 +63,15 @@ def paint_cell(x, y, color):
     )
 
 def reset():
-    global queue, visited, parent, bfs_running, found, start, end, grid
+    global queue, stack, visited, parent, bfs_running, dfs_running, found, start, end, grid
 
     queue = deque()
+    stack = []
     visited = set()
     parent = {}
 
     bfs_running = False
+    dfs_running = False
     found = False
     start = None
     end = None
@@ -142,11 +146,72 @@ def bfs(solve):
     if not bfs_running:
         bfs_init()
 
-    if solve:
+    if solve:   # gdy przycisk solve
         while bfs_step() is True:
             continue
-    else:
+    else:       # gdy przycisk step
         bfs_step()
+
+
+def dfs_init():
+    global stack, visited, parent, dfs_running, found
+
+    # inicjalizacja / reset
+    stack = []
+    visited = set()
+    parent = {}
+
+    stack.append(start)
+    visited.add(start)
+
+    dfs_running = True
+    found = False
+
+def dfs_step():
+    global stack, visited, parent, found
+
+    if found:  # ściezka odnaleziona
+        return False
+
+    if len(stack) == 0:  # pusty stos(done)
+        return False
+
+    x, y = stack.pop()  # wzięcie elementu z KOŃCA KOLEJKI (stosu) w odróżnieniu od BFS
+
+    for dx, dy in directions:
+        nx, ny = x + dx, y + dy
+
+        if 0 <= nx < cols and 0 <= ny < rows:
+            if grid[nx][ny] != 1 and (nx, ny) not in visited:  # nie jest odwiedzony i nie jest ścianą
+
+                if (nx, ny) == end:  # odnaleziono ścieżkę start -> end
+                    print("Odnaleziono sciezke")
+                    parent[(nx, ny)] = (x, y)
+                    found = True
+                    reconstruct_path()
+                    return False
+
+                visited.add((nx, ny))  # odwiedzamy
+                parent[(nx, ny)] = (x, y)  # parent = element z początku stosu
+                stack.append((nx, ny))  # dodajemy do stosu nowo odryty element
+
+                paint_cell(nx, ny, colors[4])  # paint
+    return True
+
+def dfs(solve):
+    global dfs_running
+
+    if start is None or end is None:
+        return
+
+    if not dfs_running:
+        dfs_init()
+
+    if solve:   # gdy przycisk solve
+        while dfs_step() is True:
+            continue
+    else:       # gdy przycisk step
+        dfs_step()
 
 
 
@@ -241,13 +306,24 @@ while True:
             paint_cell(e0, e1, colors[0])
             start = end = None
 
+    algo = values["algorithm"]
+
     if event == "Solve":
-        bfs(solve=True)
+        if algo == "BFS":
+            bfs(solve=True)
+        elif algo == "DFS":
+            dfs(solve=True)
 
     if event == "Next step":
-        bfs(solve=False)
+        if algo == "BFS":
+            bfs(solve=False)
+        elif algo == "DFS":
+            dfs(solve=False)
 
     if event == "Reset":
+        reset()
+
+    if event == "algorithm":
         reset()
 
 window.close()
