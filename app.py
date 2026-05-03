@@ -380,7 +380,7 @@ while True:
 
     algo = values["algorithm"]
 
-    if event == "algorithm" or event == "Reset":
+    if event == "algorithm" or event == "Reset":    # reset przy zmianie algorytmu albo przycisku reset
         reset()
         continue
 
