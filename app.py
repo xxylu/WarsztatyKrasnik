@@ -1,5 +1,6 @@
 import PySimpleGUI as sg
 from collections import deque
+from queue import PriorityQueue
 
 # Rozmiar naszego okna
 WIDTH = 1230    # +30 px, bo z jakiegoś powodu PySimple ma dziwne paddingi i ucina ostatnią kolumnę rysowanego grafu na canvie
@@ -9,12 +10,20 @@ rows = 20
 cols = 30
 grid = [[0 for _ in range(rows)] for _ in range(cols)]  # fill zerami
 
-queue = deque()         # kolejka kolejno odwiedzonych wierzchołków w BFS
-stack = []              # stos kolejno odwiedzonych wierzchołków w DFS
-visited = set()         # zbiór odwiedzonych wierzchołków
-parent = {}             # wymagane do odtworzenia ścieżki
+queue = deque()             # kolejka kolejno odwiedzonych wierzchołków w BFS
+stack = []                  # stos kolejno odwiedzonych wierzchołków w DFS
+open_list = PriorityQueue() # kolejka priorytetowa dla A* do wyboru węzła o najniższym koszcie
+closed_list = set()         # zbiór dla A* mówiący, czy w tym wierzchołku byliśmy
+visited = set()             # zbiór odwiedzonych wierzchołków
+parent = {}                 # wymagane do odtworzenia ścieżki
+
+g_score = {}    # koszt od startu do wierzchołka
+h_score = {}    # heurystyka: koszt od wierzchołka do celu
+f_score = {}    # f = g + h (łączny koszt, wg którego wybieramy najlepszy węzeł - wybieramy jak najmniejszą wartość)
+
 bfs_running = False
 dfs_running = False
+a_star_running = False
 
 start, end = None, None
 found = False
@@ -63,7 +72,7 @@ def paint_cell(x, y, color):
     )
 
 def reset():
-    global queue, stack, visited, parent, bfs_running, dfs_running, found, start, end, grid
+    global queue, stack, visited, parent, bfs_running, dfs_running, a_star_running, found, start, end, grid
 
     queue = deque()
     stack = []
@@ -72,6 +81,7 @@ def reset():
 
     bfs_running = False
     dfs_running = False
+    a_star_running = False
     found = False
     start = None
     end = None
@@ -214,6 +224,111 @@ def dfs(solve):
         dfs_step()
 
 
+def manhattan(a, b):     # dla ruchu w 4 kierunkach (góra/dół/lewo/prawo)
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+def diagonal(a, b):     # dla ruchu w 8 kierunkach
+    dx = abs(a[0] - b[0])
+    dy = abs(a[1] - b[1])
+    return max(dx, dy)
+
+def euclidean(a, b):     # dla dowolnego kierunku
+    return ((a[0] - b[0])**2 + (a[1] - b[1])**2) ** 0.5
+
+def a_star_init():
+    global open_list, closed_list, visited, parent
+    global a_star_running, found, g_score, h_score, f_score
+
+    if start is None or end is None:
+        return
+
+    # inicjalizacja / reset
+    open_list = PriorityQueue()
+    closed_list = set()
+    visited = set()
+    parent = {}
+
+    g_score = {}
+    h_score = {}
+    f_score = {}
+
+    g_score[start] = 0
+    h_score[start] = manhattan(start, end)
+    f_score[start] = g_score[start] + h_score[start]
+
+    open_list.put((f_score[start], start))
+
+    a_star_running = True
+    found = False
+
+def a_star_step():
+    global open_list, closed_list, parent, found
+    global g_score, h_score, f_score
+
+    if found:
+        return False
+
+    if open_list.empty():
+        return False
+
+    f, current = open_list.get()    # f_score niepotrzebny, ale Prioryty Queue porównuje pierwszy element tupli,
+                                    #  dlatego ogólnie tam jest. Na przykład: (5, (1,1)) < (10, (3,5))
+    if current in closed_list:
+        return True
+
+    if current == end:
+        print("Odnaleziono sciezke")
+        found = True
+        reconstruct_path()
+        return False
+
+    closed_list.add(current)
+
+    x, y = current  # rozpakowanie tupli
+
+    for dx, dy in directions:
+        nx, ny = x + dx, y + dy
+        neighbor = (nx, ny)
+
+        if not (0 <= nx < cols and 0 <= ny < rows): # zabezpieczenie boundaries
+            continue
+
+        if grid[nx][ny] == 1:   # ściana
+            continue
+
+        if neighbor in closed_list: # już wcześniej odwiedzony
+            continue
+
+        tmp_g = g_score[current] + 1
+
+        if neighbor not in g_score or tmp_g < g_score[neighbor]:
+            parent[neighbor] = current
+
+            g_score[neighbor] = tmp_g
+            h_score[neighbor] = manhattan(neighbor, end)
+            f_score[neighbor] = g_score[neighbor] + h_score[neighbor]
+
+            open_list.put((f_score[neighbor], neighbor))
+
+            if neighbor != start and neighbor != end:
+                paint_cell(nx, ny, colors[4])   # odwiedzony
+
+    return True
+
+def a_star(solve):
+    global a_star_running
+
+    if start is None or end is None:
+        return
+
+    if not a_star_running:
+        a_star_init()
+
+    if solve:   # gdy przycisk solve
+        while a_star_step() is True:
+            continue
+    else:       # gdy przycisk step
+        a_star_step()
 
 
 # układ elementów w oknie, przyjmuje listę list. Co ciekawe, minimalnie musi istnieć co najmniej jeden wiersz.
@@ -261,7 +376,37 @@ while True:
     if event == sg.WIN_CLOSED:
         break
 
+    # Obsługa przycisków
+
+    algo = values["algorithm"]
+
+    if event == "algorithm" or event == "Reset":
+        reset()
+        continue
+
+    if event == "Solve":
+        if algo == "BFS":
+            bfs(solve=True)
+        elif algo == "DFS":
+            dfs(solve=True)
+        elif algo == "A*":
+            a_star(solve=True)
+
+    if event == "Next step":
+        if algo == "BFS":
+            bfs(solve=False)
+        elif algo == "DFS":
+            dfs(solve=False)
+        elif algo == "A*":
+            a_star(solve=False)
+
+
+    # Obsługa myszki
+
     x, y = values["graph"]
+
+    if x is None or y is None:
+        continue
 
 
     gx = int(x // CELL_SIZE)
@@ -271,18 +416,18 @@ while True:
         continue
 
     # ustawienie/usunięcie blokady na klikniętej celi:
+
     if event in ("graphLMB", "graphRMB"):
+        if grid[gx][gy] in (2, 3):  # start / end
+            continue
+
         if event == "graphLMB":
-            if grid[gx][gy] == 2 or grid[gx][gy] == 3:  # continue dla początku / końca
-                continue
             grid[gx][gy] = 1
-            paint_cell(gx, gy, colors[1])
+            paint_cell(gx, gy, colors[1])   # ściana
 
         elif event == "graphRMB":
-            if grid[gx][gy] == 2 or grid[gx][gy] == 3:  # continue dla początku / końca
-                continue
             grid[gx][gy] = 0
-            paint_cell(gx, gy, colors[0])
+            paint_cell(gx, gy, colors[0])   # puste
 
 
     # ustawienie startu/końca/wymazanie ich
@@ -291,40 +436,27 @@ while True:
             start = (gx, gy)
             grid[gx][gy] = 2
             paint_cell(gx, gy, colors[2])
+
         elif end is None:
             end = (gx, gy)
             grid[gx][gy] = 3
             paint_cell(gx, gy, colors[3])
+
         else:
-            s0 = start[0]
+            s0 = start[0]   # s0, s1 = start
             s1 = start[1]
             e0 = end[0]
             e1 = end[1]
 
-            grid[s0][s1] = grid[e0][e1] = 0
+            grid[s0][s1] = 0
+            grid[e0][e1] = 0
+
             paint_cell(s0, s1, colors[0])
             paint_cell(e0, e1, colors[0])
+
             start = end = None
 
     algo = values["algorithm"]
-
-    if event == "Solve":
-        if algo == "BFS":
-            bfs(solve=True)
-        elif algo == "DFS":
-            dfs(solve=True)
-
-    if event == "Next step":
-        if algo == "BFS":
-            bfs(solve=False)
-        elif algo == "DFS":
-            dfs(solve=False)
-
-    if event == "Reset":
-        reset()
-
-    if event == "algorithm":
-        reset()
 
 window.close()
 
