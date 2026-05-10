@@ -45,5 +45,5 @@ test_loss, test_acc = model.evaluate(x_test,  y_test, verbose=2)
 print(f"\nDokładność (accuracy) na danych testowych: {test_acc * 100:.2f}%")
 
 # 6. Zapisanie modelu do pliku
-model.save('moj_model_mnist.keras')
+model.save('ocr-mnist.keras')
 print("\nGotowe! Model został zapisany jako 'moj_model_mnist.keras'")
