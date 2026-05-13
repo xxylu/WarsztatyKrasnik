@@ -13,7 +13,7 @@ x_train, x_test = x_train / 255.0, x_test / 255.0
 
 # 2. Budowa architektury modelu
 model = models.Sequential([
-    # Obrazki w MNIST mają 28x28 pikseli. Flatten "spłaszcza" je do wektora 784 liczb.
+    # Obrazki w MNIST mają 28x28 pikseli. Flatten spłaszcza je do wektora 784 liczb.
     layers.Flatten(input_shape=(28, 28)),
 
     # Ukryta warstwa z 128 neuronami (mózg naszej sieci) z funkcją aktywacji ReLU
